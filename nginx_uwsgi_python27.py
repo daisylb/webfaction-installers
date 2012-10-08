@@ -129,5 +129,10 @@ if __name__ == '__main__':
 	server = xmlrpclib.ServerProxy('https://api.webfaction.com/')
 	session_id, account = server.login(username, password, machine)
 	func = locals()[action]
-	func(account, app_name, autostart, extra_info, password, server, session_id, username)
+	try:
+		func(account, app_name, autostart, extra_info, password, server, session_id, username)
+	except Exception as e:
+		from traceback import print_exc
+		print_exc()
+		exit(1)
 # -----END WEBFACTION INSTALL SCRIPT-----
