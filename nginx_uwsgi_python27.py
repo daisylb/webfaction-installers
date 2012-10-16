@@ -1,3 +1,4 @@
+#!/usr/local/bin/python2.7
 # -----BEGIN WEBFACTION INSTALL SCRIPT-----
 #!/usr/local/bin/python2.7
 """
@@ -15,6 +16,9 @@ When you set up your deployment process, set it up to copy your app to the <appn
 
 import xmlrpclib
 import sys
+
+_old_stderr = sys.stderr
+sys.stderr = sys.stdout
 
 NGINX_CONF = """
 worker_processes  1;
@@ -73,16 +77,17 @@ NGINX_VERSION = '1.3.6'
 
 def create(account, app_name, autostart, extra_info, password, server, session_id, username):
     # create a custom app
+    # returns a dict containing name, id, machine, autostart, type, port, extra_info
     app = server.create_app(session_id, app_name, 'custom_app_with_port', False, '')
     
     install_steps = (
         # make directories
-        'mkdir bin conf lib lib/python2.7 pid sock app tmp',
+        'mkdir build bin conf lib lib/python2.7 pid sock app tmp',
         
         # download
         'cd build',
-        'curl -O https://projects.unbit.it/downloads/uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
-        'curl -O http://nginx.org/download/nginx-{}.tar.gz'.format(NGINX_VERSION),
+        'curl -sSO https://projects.unbit.it/downloads/uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
+        'curl -sSO http://nginx.org/download/nginx-{}.tar.gz'.format(NGINX_VERSION),
         
         # install uwsgi
         'tar xf uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
@@ -106,15 +111,17 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
     )
     
     # run install steps
-    server.system(session_id, '; '.join(install_steps))
+    server.system(session_id, 'bash -ec "{}"'.format('; '.join(install_steps).replace('"', r'\"')))
     
     # install nginx.conf
-    nginx_conf = NGINX_CONF.replace('APPNAME', app_name).replace('PORT', port)
+    nginx_conf = NGINX_CONF.replace('APPNAME', app_name).replace('PORT', str(app['port']))
     server.write_file(session_id, 'conf/nginx.conf', nginx_conf, 'w')
     
     # create database if required
-    if 'postgres' in extra_info:
-        db_name = db_user = '%s_%s' % (username, app_name)
+    # if 'postgres' in extra_info:
+    #     db_name = db_user = '%s_%s' % (username, app_name)
+    
+    print app['id']
 
 def delete(account, app_name, autostart, extra_info, password, server, session_id, username):
     # Delete application and database.
@@ -125,9 +132,19 @@ def delete(account, app_name, autostart, extra_info, password, server, session_i
         pass
 
 if __name__ == '__main__':
-    action, username, password, machine, app_name, autostart, extra_info = sys.argv[1:]
-    server = xmlrpclib.ServerProxy('https://api.webfaction.com/')
-    session_id, account = server.login(username, password, machine)
-    func = locals()[action]
-    func(account, app_name, autostart, extra_info, password, server, session_id, username)
+    try:
+        action, username, password, machine, app_name, autostart, extra_info = sys.argv[1:]
+        server = xmlrpclib.ServerProxy('https://api.webfaction.com/')
+        session_id, account = server.login(username, password, machine)
+        func = locals()[action]
+        func(account, app_name, autostart, extra_info, password, server, session_id, username)
+    except Exception as e:
+        # try to delete the app
+        try:
+            server.delete_app(session_id, app_name)
+        except:
+            pass
+        # print the exception
+        from traceback import print_exc
+        print_exc(sys.stdout)
 # -----END WEBFACTION INSTALL SCRIPT-----
