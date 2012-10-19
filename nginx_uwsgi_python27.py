@@ -7,7 +7,7 @@ Serve arbitrary WSGI web apps with nginx and uWSGI.
 Expected structure:
 
 app/
-  wsgi.py - Required. Should contain your WSGI app.
+  wsgi.py - Required. Should contain your WSGI app callable as `application`.
   requirements.txt - Optional. a Pip requirements file.
   post-update - Optional. A shell script that is run after an update, to do things like DB migrations.
 
@@ -22,9 +22,9 @@ sys.stderr = sys.stdout
 
 NGINX_CONF = """
 worker_processes  1;
-pid               pid/nginx.pid;
+pid               DIR/pid/nginx.pid;
 
-error_log         ~/logs/user/error_APPNAME.log;
+error_log         HOME/logs/user/error_APPNAME.log;
 
 events {
   worker_connections  1024;
@@ -40,13 +40,13 @@ http {
   gzip                  on;
 
   # Directories
-  client_body_temp_path tmp/client_body/  2 2;
-  fastcgi_temp_path     tmp/fastcgi/;
-  proxy_temp_path       tmp/proxy/;
-  uwsgi_temp_path       tmp/uwsgi/;
+  client_body_temp_path DIR/tmp/client_body/  2 2;
+  fastcgi_temp_path     DIR/tmp/fastcgi/;
+  proxy_temp_path       DIR/tmp/proxy/;
+  uwsgi_temp_path       DIR/tmp/uwsgi/;
 
   # Logging
-  access_log            ~/logs/user/access_APPNAME.log  combined;
+  access_log            HOME/logs/user/access_APPNAME.log  combined;
 
   # uWSGI upstream config
   upstream wsgi {
@@ -54,7 +54,7 @@ http {
     # balancing fair but consistent per-client. In this instance we're
     # only using one uWGSI worker anyway.
     ip_hash;
-    server unix:sock/uwsgi.sock;
+    server unix:DIR/sock/uwsgi.sock;
   }
 
   server {
@@ -69,7 +69,68 @@ http {
 }
 """
 
-UWSGI_CONFIG = """
+# aside: there is a better uwsgi.ini for Django at this url: http://projects.unbit.it/uwsgi/wiki/Example
+
+UWSGI_INI = """
+[uwsgi]
+binary-path = DIR/bin/uwsgi
+touch-reload = DIR/tmp/reload-uwsgi
+daemonize = HOME/logs/user/error_APPNAME_uwsgi.log
+
+# nginx communication
+socket = DIR/sock/uwsgi.sock
+file-serve-mode = x-accel-redirect
+
+# workers
+workers = 2
+pidfile = DIR/pid/uwsgi.pid
+reload-on-rss = 32
+
+# wsgi stuff
+chdir = DIR/app/
+module = wsgi:application
+"""
+
+CONTROL_SCRIPT = """
+#!/bin/bash
+
+case "$1" in
+    "start" )
+        touch DIR/tmp/reload-uwsgi
+        DIR/bin/uwsgi --ini DIR/conf/uwsgi.ini
+        DIR/bin/nginx -c DIR/conf/nginx.conf
+        ;;
+    "stop" )
+        DIR/bin/nginx -c DIR/conf/nginx.conf -s stop
+        kill -INT $(cat DIR/pid/uwsgi.pid)
+        ;;
+    "reload-app" )
+        touch DIR/tmp/reload-uwsgi
+        ;;
+    "reload-config" )
+        DIR/bin/uwsgi
+        kill -HUP $(cat DIR/pid/nginx.pid)
+        ;;
+    *)
+        echo "Usage: ctl start|stop|reload-app|reload-config"
+        ;;
+esac
+"""
+
+RELOAD_APP = """
+#!/bin/bash
+set -e
+# TODO: Update requirements.txt etc
+bin/ctl reload-app
+app/post-update
+"""
+
+SAMPLE_APP = """
+import sys
+
+def application(environ, start_response):
+    start_response('200 OK', [('Content-Type', 'text/plain')])
+    yield 'Hello World!\\\\n' + sys.version + '\\\\n'
 """
 
 UWSGI_VERSION = '1.3'
@@ -79,6 +140,7 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
     # create a custom app
     # returns a dict containing name, id, machine, autostart, type, port, extra_info
     app = server.create_app(session_id, app_name, 'custom_app_with_port', False, '')
+    app_dir = "/home/{}/webapps/{}".format(username, app_name)
     
     install_steps = (
         # make directories
@@ -86,8 +148,16 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
         
         # download
         'cd build',
-        'curl -sSO https://projects.unbit.it/downloads/uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
-        'curl -sSO http://nginx.org/download/nginx-{}.tar.gz'.format(NGINX_VERSION),
+        'mkdir -p ~/.dlcache',
+        'if test ! -f ~/.dlcache/uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
+        'then curl -sSo ~/.dlcache/uwsgi-{v}.tar.gz https://projects.unbit.it/downloads/uwsgi-{v}.tar.gz'.format(v=UWSGI_VERSION),
+        'fi',
+        'cp ~/.dlcache/uwsgi-{}.tar.gz .'.format(UWSGI_VERSION),
+        
+        'if test ! -f ~/.dlcache/nginx-{}.tar.gz'.format(UWSGI_VERSION),
+        'then curl -sSo ~/.dlcache/nginx-{v}.tar.gz http://nginx.org/download/nginx-{v}.tar.gz'.format(v=NGINX_VERSION),
+        'fi',
+        'cp ~/.dlcache/nginx-{}.tar.gz .'.format(NGINX_VERSION),
         
         # install uwsgi
         'tar xf uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
@@ -113,9 +183,23 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
     # run install steps
     server.system(session_id, 'bash -ec "{}"'.format('; '.join(install_steps).replace('"', r'\"')))
     
-    # install nginx.conf
-    nginx_conf = NGINX_CONF.replace('APPNAME', app_name).replace('PORT', str(app['port']))
+    # install nginx.conf and uwsgi.ini
+    nginx_conf = (NGINX_CONF
+        .replace('APPNAME', app_name)
+        .replace('PORT', str(app['port']))
+        .replace('DIR', app_dir)
+        .replace('HOME', '/home/{}'.format(username))
+    )
+    uwsgi_ini = (UWSGI_INI
+        .replace('DIR', app_dir)
+        .replace('APPNAME', app_name)
+        .replace('HOME', '/home/{}'.format(username)))
     server.write_file(session_id, 'conf/nginx.conf', nginx_conf, 'w')
+    server.write_file(session_id, 'conf/uwsgi.ini', uwsgi_ini, 'w')
+    server.write_file(session_id, 'bin/ctl', CONTROL_SCRIPT.replace('DIR', app_dir), 'w')
+    server.write_file(session_id, 'reload-app', RELOAD_APP.replace('DIR', app_dir), 'w')
+    server.write_file(session_id, 'app/wsgi.py', SAMPLE_APP, 'w')
+    server.system(session_id, 'chmod +x bin/ctl reload-app')
     
     # create database if required
     # if 'postgres' in extra_info:

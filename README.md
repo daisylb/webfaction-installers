@@ -1,6 +1,18 @@
 # webfaction-installers
 
-Install scripts for use on WebFaction
+- nginx_uwsgi_python27: Run WSGI apps on top of nginx and uwsgi. Designed to be automated with a SCM-based auto deploy process.
+	- Put your app in the `app/` folder.
+		- Make sure that there's a `wsgi.py` containing the wsgi callable as `application`.
+		- Optionally, put a `requirements.txt` file in `app/`.
+		- Optionally, put a `post-update` script in `app/`.
+	- Run the `update` script.
+	- Note: Currently runs stuff under 2.6, not 2.7.
+
+## Installers To Do
+
+- General redirect using extra_info (eg `redirect=http://example.com/`, `redirect=http://example.net/my/url append-path=no`)
+- Redirect to HTTPS
+- Sentry
 
 ## Notes on writing WebFaction installers
 
