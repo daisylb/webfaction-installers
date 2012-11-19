@@ -9,9 +9,9 @@ for xy in 2.5 2.6 2.7; do
 	python$xy get-pip.py
 done
 
-# for xy in 3.0 3.1 3.2 3.3; do
+# for xy in 3.1 3.2 3.3; do
 # 	mkdir -p $HOME/lib/python$xy
-# 	python$xy distribute_setup.py
+# 	python$xy distribute_setup.py --user
 # 	python$xy get-pip.py
 # done
 
