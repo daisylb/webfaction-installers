@@ -9,7 +9,7 @@ Expected structure:
 app/
   wsgi.py - Required. Should contain your WSGI app callable as `application`.
   requirements.txt - Optional. a Pip requirements file.
-  post-update - Optional. A shell script that is run after an update, to do things like DB migrations.
+  update.sh - Optional. A shell script that is run after an update but before the server is reloaded. Can be used to deal with things like migrations.
 
 When you set up your deployment process, set it up to copy your app to the <appname>/app folder and call the update-app script.
 """
@@ -120,9 +120,13 @@ esac
 RELOAD_APP = """
 #!/bin/bash
 set -e
-# TODO: Update requirements.txt etc
 bin/ctl reload-app
-app/post-update
+if test -f DIR/app/requirements.txt; then
+    pip-2.7 install --install-option="--install-scripts=DIR/bin" --install-option="--install-lib=DIR/lib/python2.7" -r DIR/app/requirements.txt
+fi
+if test -f DIR/app/update.sh; then
+    DIR/app/update.sh
+fi
 """
 
 SAMPLE_APP = """
@@ -162,7 +166,7 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
         # install uwsgi
         'tar xf uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
         'cd uwsgi-{}'.format(UWSGI_VERSION),
-        'make',
+        'python2.7 uwsgiconfig.py --build',
         'mv uwsgi ../../bin',
         'cd ..',
         
