@@ -108,7 +108,7 @@ case "$1" in
         touch DIR/tmp/reload-uwsgi
         ;;
     "reload-config" )
-        DIR/bin/uwsgi
+        DIR/bin/uwsgi # todo: fix this
         kill -HUP $(cat DIR/pid/nginx.pid)
         ;;
     *)
@@ -120,13 +120,13 @@ esac
 RELOAD_APP = """
 #!/bin/bash
 set -e
-bin/ctl reload-app
 if test -f DIR/app/requirements.txt; then
     pip-2.7 install --install-option="--install-scripts=DIR/bin" --install-option="--install-lib=DIR/lib/python2.7" -r DIR/app/requirements.txt
 fi
 if test -f DIR/app/update.sh; then
-    DIR/app/update.sh
+    (cd DIR/app && ./update.sh)
 fi
+DIR/bin/ctl reload-app
 """
 
 SAMPLE_APP = """
