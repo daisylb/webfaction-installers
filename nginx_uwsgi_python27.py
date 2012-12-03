@@ -214,6 +214,7 @@ def delete(account, app_name, autostart, extra_info, password, server, session_i
     # Delete application and database.
     try:
         server.system('unlink $HOME/supervisor/app_APPNAME.conf'.replace('APPNAME', app_name))
+        server.system('$HOME/bin/supervisorctl update')
     except:
         pass
     
