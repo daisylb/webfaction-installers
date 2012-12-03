@@ -12,6 +12,8 @@ app/
   update.sh - Optional. A shell script that is run after an update but before the server is reloaded. Can be used to deal with things like migrations.
 
 When you set up your deployment process, set it up to copy your app to the <appname>/app folder and call the update-app script.
+
+Requires: pip, supervisor
 """
 
 import xmlrpclib
@@ -25,6 +27,9 @@ worker_processes  1;
 pid               DIR/pid/nginx.pid;
 
 error_log         HOME/logs/user/error_APPNAME.log;
+
+# Don't daemonize, as nginx is managed by supervisord
+daemon           off;
 
 events {
   worker_connections  1024;
@@ -74,8 +79,7 @@ http {
 UWSGI_INI = """
 [uwsgi]
 binary-path = DIR/bin/uwsgi
-touch-reload = DIR/tmp/reload-uwsgi
-daemonize = HOME/logs/user/error_APPNAME_uwsgi.log
+logto = HOME/logs/user/error_APPNAME_uwsgi.log
 
 # nginx communication
 socket = DIR/sock/uwsgi.sock
@@ -91,30 +95,19 @@ chdir = DIR/app/
 module = wsgi:application
 """
 
-CONTROL_SCRIPT = """
-#!/bin/bash
+SUPERVISOR_CONFIG = """
+[group:app_APPNAME]
+programs=app_APPNAME_uwsgi,app_APPNAME_nginx
 
-case "$1" in
-    "start" )
-        touch DIR/tmp/reload-uwsgi
-        DIR/bin/uwsgi --ini DIR/conf/uwsgi.ini
-        DIR/bin/nginx -c DIR/conf/nginx.conf
-        ;;
-    "stop" )
-        DIR/bin/nginx -c DIR/conf/nginx.conf -s stop
-        kill -INT $(cat DIR/pid/uwsgi.pid)
-        ;;
-    "reload-app" )
-        touch DIR/tmp/reload-uwsgi
-        ;;
-    "reload-config" )
-        DIR/bin/uwsgi # todo: fix this
-        kill -HUP $(cat DIR/pid/nginx.pid)
-        ;;
-    *)
-        echo "Usage: ctl start|stop|reload-app|reload-config"
-        ;;
-esac
+[program:app_APPNAME_uwsgi]
+command=DIR/bin/uwsgi --ini DIR/conf/uwsgi.ini
+priority=1
+autorestart=true
+
+[program:app_APPNAME_nginx]
+command=DIR/bin/nginx -c DIR/conf/nginx.conf
+priority=2
+autorestart=true
 """
 
 RELOAD_APP = """
@@ -126,7 +119,7 @@ fi
 if test -f DIR/app/update.sh; then
     (cd DIR/app && ./update.sh)
 fi
-DIR/bin/ctl reload-app
+supervisorctl restart app_APPNAME:*
 """
 
 SAMPLE_APP = """
@@ -200,10 +193,16 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
         .replace('HOME', '/home/{}'.format(username)))
     server.write_file(session_id, 'conf/nginx.conf', nginx_conf, 'w')
     server.write_file(session_id, 'conf/uwsgi.ini', uwsgi_ini, 'w')
-    server.write_file(session_id, 'bin/ctl', CONTROL_SCRIPT.replace('DIR', app_dir), 'w')
-    server.write_file(session_id, 'reload-app', RELOAD_APP.replace('DIR', app_dir), 'w')
+    server.write_file(session_id, 'conf/supervisord.conf', SUPERVISOR_CONFIG.replace('DIR', app_dir).replace('APPNAME', app_name), 'w')
+    server.write_file(session_id, 'reload-app', RELOAD_APP.replace('DIR', app_dir).replace('APPNAME', app_name), 'w')
     server.write_file(session_id, 'app/wsgi.py', SAMPLE_APP, 'w')
-    server.system(session_id, 'chmod +x bin/ctl reload-app')
+    
+    # set up app
+    server.system(session_id, 'chmod +x reload-app')
+    server.system(session_id, 'ln -s $PWD/conf/supervisord.conf $HOME/supervisor/app_APPNAME.conf'.replace('APPNAME', app_name))
+    
+    # load app
+    server.system(session_id, '$HOME/bin/supervisorctl update')
     
     # create database if required
     # if 'postgres' in extra_info:
@@ -213,7 +212,13 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
 
 def delete(account, app_name, autostart, extra_info, password, server, session_id, username):
     # Delete application and database.
+    try:
+        server.system('unlink $HOME/supervisor/app_APPNAME.conf'.replace('APPNAME', app_name))
+    except:
+        pass
+    
     server.delete_app(session_id, app_name)
+    
     try:
         server.delete_db(session_id, '%s_%s' % (username, app_name), 'postgres')
     except:
