@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -e
 
 # SUPERVISOR
 # Installs the Supervisor process manager.
