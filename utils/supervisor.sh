@@ -1,3 +1,11 @@
+#!/usr/bin/env bash
+set -e
+
+# SUPERVISOR
+# Installs the Supervisor process manager.
+# All files in ~/supervisor/ will be included into the config,
+# so place per-app configs there rather than editing the main config file.
+
 # install
 easy_install-2.7 supervisor
 
