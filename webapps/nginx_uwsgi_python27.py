@@ -88,7 +88,7 @@ file-serve-mode = x-accel-redirect
 # workers
 workers = 2
 pidfile = DIR/pid/uwsgi.pid
-reload-on-rss = 32
+reload-on-rss = 48
 
 # wsgi stuff
 chdir = DIR/app/
@@ -103,6 +103,9 @@ programs=app_APPNAME_uwsgi,app_APPNAME_nginx
 command=DIR/bin/uwsgi --ini DIR/conf/uwsgi.ini
 priority=1
 autorestart=true
+; these two are to stop uwsgi zombies
+stopsignal=QUIT
+stopasgroup=true
 
 [program:app_APPNAME_nginx]
 command=DIR/bin/nginx -c DIR/conf/nginx.conf
