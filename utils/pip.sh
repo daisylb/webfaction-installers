@@ -25,3 +25,4 @@ done
 
 rm distribute_setup.py
 rm get-pip.py
+rm distribute*.tar.gz
