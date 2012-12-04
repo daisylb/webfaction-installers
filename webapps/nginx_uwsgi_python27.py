@@ -117,7 +117,7 @@ if test -f DIR/app/requirements.txt; then
     pip-2.7 install --install-option="--install-scripts=DIR/bin" --install-option="--install-lib=DIR/lib/python2.7" -r DIR/app/requirements.txt
 fi
 if test -f DIR/app/update.sh; then
-    (cd DIR/app && ./update.sh)
+    (cd DIR/app && bash update.sh)
 fi
 supervisorctl restart app_APPNAME:*
 """
