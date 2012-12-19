@@ -117,7 +117,7 @@ RELOAD_APP = """
 #!/bin/bash
 set -e
 if test -f DIR/app/requirements.txt; then
-    pip-2.7 install --install-option="--install-scripts=DIR/bin" --install-option="--install-lib=DIR/lib/python2.7" -r DIR/app/requirements.txt
+    pip-2.7 install --install-option="--install-scripts=DIR/bin" --install-option="--install-lib=DIR/lib/python2.7" -U -r DIR/app/requirements.txt
 fi
 if test -f DIR/app/update.sh; then
     (cd DIR/app && bash update.sh)
@@ -178,6 +178,7 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
         'cd ..',
         'cp build/nginx-{}/conf/mime.types conf/'.format(NGINX_VERSION),
         'cp build/uwsgi-{}/nginx/uwsgi_params conf/'.format(UWSGI_VERSION),
+        'rm -rf build',
     )
     
     # run install steps
