@@ -24,6 +24,25 @@ sys.stderr = sys.stdout
 SENTRY_CONF = """
 import os.path
 
+##########################################################################
+# You will need to edit the following lines for Sentry to work properly. #
+##########################################################################
+
+# This is the URL that Sentry is bound to.
+# By default it will try to guess it, but it will almost certainly guess wrong due to WF's reverse proxy.
+# It should NOT have a trailing slash.
+
+# SENTRY_URL_PREFIX = 'http://{app_name}.{username}.webfactional.com'
+
+# The installer creates a Sentry mailbox (named the same as the app) for you.
+# You will need to attatch that mailbox to an email address, and then change the following line appropriately.
+
+SERVER_EMAIL = '{app_name}@{username}.webfactional.com'
+
+#######
+# End #
+#######
+
 CONF_ROOT = os.path.dirname(__file__)
 
 DATABASES = {{
@@ -37,11 +56,6 @@ DATABASES = {{
 	}}
 }}
 
-# You should configure the absolute URI to Sentry. It will attempt to guess it if you don't
-# but proxies may interfere with this.
-# No trailing slash!
-# SENTRY_URL_PREFIX = 'http://{app_name}.{username}.webfactional.com'
-
 # SENTRY_KEY is a unique randomly generated secret key for your server, and it
 # acts as a signing token
 SENTRY_KEY = '{secret}'
@@ -53,6 +67,11 @@ SENTRY_WEB_PORT = {port}
 SENTRY_WEB_OPTIONS = {{
 	'workers': 2,  # the number of gunicorn workers
 }}
+
+EMAIL_HOST = 'smtp.webfaction.com'
+EMAIL_HOST_USER = '{app_name}'
+EMAIL_HOST_PASSWORD = '{mail_pass}'
+DEFAULT_FROM_EMAIL = SERVER_EMAIL
 
 # We're assuming you don't want to run a public Sentry installation.
 SOCIAL_AUTH_CREATE_USERS = False
@@ -90,8 +109,13 @@ def create(account, app_name, autostart, extra_info, password, server, session_i
 
 	# create database
 	db_name = "{}_{}".format(username, app_name)
-	db_pass = generate_password(20)
+	db_pass = generate_password(30)
 	server.create_db(session_id, db_name, 'postgresql', db_pass)
+	
+	# create mailbox
+	mail_pass = generate_password(30)
+	server.create_mailbox(session_id, app_name, True, True)
+	server.change_mailbox_password(session_id, app_name, mail_pass)
 	
 	# generate a secret
 	secret = generate_password(56)
