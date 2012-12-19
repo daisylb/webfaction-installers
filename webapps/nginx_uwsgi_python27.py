@@ -96,10 +96,10 @@ module = wsgi:application
 """
 
 SUPERVISOR_CONFIG = """
-[group:app_APPNAME]
-programs=app_APPNAME_uwsgi,app_APPNAME_nginx
+[group:app-APPNAME]
+programs=app-APPNAME-uwsgi,app-APPNAME-nginx
 
-[program:app_APPNAME_uwsgi]
+[program:app-APPNAME-uwsgi]
 command=DIR/bin/uwsgi --ini DIR/conf/uwsgi.ini
 priority=1
 autorestart=true
@@ -107,7 +107,7 @@ autorestart=true
 stopsignal=QUIT
 stopasgroup=true
 
-[program:app_APPNAME_nginx]
+[program:app-APPNAME-nginx]
 command=DIR/bin/nginx -c DIR/conf/nginx.conf
 priority=2
 autorestart=true
@@ -224,10 +224,10 @@ def delete(account, app_name, autostart, extra_info, password, server, session_i
     
     server.delete_app(session_id, app_name)
     
-    try:
-        server.delete_db(session_id, '%s_%s' % (username, app_name), 'postgres')
-    except:
-        pass
+    # try:
+    #     server.delete_db(session_id, '%s_%s' % (username, app_name), 'postgresql')
+    # except:
+    #     pass
 
 if __name__ == '__main__':
     try:
