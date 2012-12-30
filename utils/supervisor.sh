@@ -26,6 +26,7 @@ pidfile=__HOME__/pid/supervisord.pid ; (supervisord pidfile;default supervisord.
 nodaemon=false               ; (start in foreground if true;default false)
 minfds=1024                  ; (min. avail startup file descriptors;default 1024)
 minprocs=200                 ; (min. avail process descriptors;default 200)
+environment=PATH=__PATH__
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
@@ -37,7 +38,7 @@ serverurl=unix://__HOME__/sock/supervisor.sock ; use a unix:// URL  for a unix s
 files = __HOME__/supervisor/*
 EOF
 # ~/etc/supervisord.conf is one of the default config search locations
-echo "$SUPERVISOR_CFG" | sed "s|__HOME__|$HOME|g" > ~/etc/supervisord.conf
+echo "$SUPERVISOR_CFG" | sed -e "s|__HOME__|$HOME|g" -e "s|__PATH__|$PATH|g" > ~/etc/supervisord.conf
 
 # use cron to ensure supervisord is running
 (crontab -l ; echo "0,20,40 * * * * $HOME/bin/supervisord -c $HOME/etc/supervisord.conf") | crontab -
