@@ -6,8 +6,6 @@ from os.path import expanduser
 from collections import namedtuple
 import xmlrpclib
 from traceback import print_exception
-import inspect
-from cStringIO import StringIO
 import sys
 
 WebfactionArgs = namedtuple("WebfactionArgs", ("action", "username", "password", "machine", "app_name", "autostart", "extra_info"))
@@ -28,7 +26,7 @@ class ApiPassthrough (object):
 	def __getattr__(self, name):
 		"""Wraps function calls to automatically insert the session ID as first argument."""
 		def wrap(*args):
-			return getattr(self.raw_server_proxy, name)(self.session_id, *args)
+			return getattr(self.server_proxy, name)(self.session_id, *args)
 		return wrap
 
 class WebfactionInstaller (object):
@@ -122,6 +120,6 @@ class WebfactionInstaller (object):
 
 class CustomAppOnPortInstaller (WebfactionInstaller):
 	def _pre_create(self):
-		self.base_app = server.create_app(self.args.app_name, 'custom_app_with_port', False, '')
+		self.base_app = self.api.create_app(self.args.app_name, 'custom_app_with_port', False, '')
 		self.app_id = self.base_app['id']
 		self.port = self.base_app['port']
