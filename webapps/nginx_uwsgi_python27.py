@@ -18,6 +18,7 @@ Requires: pip, supervisor
 
 import xmlrpclib
 import sys
+from sys.path import expanduser
 
 _old_stderr = sys.stderr
 sys.stderr = sys.stdout
@@ -244,5 +245,6 @@ if __name__ == '__main__':
             pass
         # print the exception
         from traceback import print_exc
-        print_exc(sys.stdout)
+        with open(expanduser('~/failed_install.log'), 'w') as f:
+            print_exc(f)
 # -----END WEBFACTION INSTALL SCRIPT-----
