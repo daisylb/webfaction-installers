@@ -28,4 +28,4 @@ Various custom-webapp and utility installers for WebFaction's hosting platform.
 		
 	This allows them to be copy-pasted or used as a remote URL.
 - You cannot use tabs for indentation.
-- Sending any output to stderr will result in failure with an unhelpful generic error message. To display helpful error message, wrap everything in a `try .. except BaseException` and print the exception to stdout.
+- Contrary to what the official WebFaction docs say, returning any unexpected output on stdout, or any output at all on stderr, results in the script failing with a generic error message. The best way to record any information on failure is to write it to a file.
