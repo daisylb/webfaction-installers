@@ -206,7 +206,7 @@ class NginxUwsgiPython27Installer (CustomAppOnPortInstaller):
     def delete(self):
         # Delete application and database.
         try:
-            self.api.system('unlink $HOME/supervisor/app_APPNAME.conf'.replace('APPNAME', app_name))
+            self.api.system('unlink $HOME/supervisor/app_APPNAME.conf'.replace('APPNAME', self.args.app_name))
             self.api.system('$HOME/bin/supervisorctl update')
         except:
             pass
