@@ -65,6 +65,7 @@ http {
     location / {
       uwsgi_pass  wsgi;
       include     uwsgi_params;
+      uwsgi_param UWSGI_SCHEME $http_x_forwarded_proto;
     }
   }
 }
