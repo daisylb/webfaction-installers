@@ -114,7 +114,7 @@ RELOAD_APP = """
 #!/bin/bash
 set -e
 if test -f DIR/app/requirements.txt; then
-    pip-2.7 install --install-option="--install-scripts=DIR/bin" --install-option="--install-lib=DIR/lib/python2.7" -U -r DIR/app/requirements.txt
+    DIR/bin/pip -U -r DIR/app/requirements.txt
 fi
 if test -f DIR/app/update.sh; then
     (cd DIR/app && bash update.sh)
@@ -127,20 +127,20 @@ import sys
 
 def application(environ, start_response):
     start_response('200 OK', [('Content-Type', 'text/plain')])
-    yield 'Hello World!\\\\n' + sys.version + '\\\\n'
+    yield 'Hello World!\\\\n' + sys.version + '\\\\n' + sys.executable + '\\\\n'
 """
 
 UWSGI_VERSION = '1.3'
 NGINX_VERSION = '1.3.6'
 
 class NginxUwsgiPython27Installer (CustomAppOnPortInstaller):
-
     def create(self):
         app_dir = "/home/{}/webapps/{}".format(self.args.username, self.args.app_name)
         
         install_steps = (
-            # make directories
-            'mkdir build bin conf lib lib/python2.7 pid sock app tmp',
+            # make virtualenv and directories
+            '~/bin/virtualenv --python=python2.7 .',
+            'mkdir build conf pid sock app tmp',
             
             # download
             'cd build',
@@ -158,7 +158,7 @@ class NginxUwsgiPython27Installer (CustomAppOnPortInstaller):
             # install uwsgi
             'tar xf uwsgi-{}.tar.gz'.format(UWSGI_VERSION),
             'cd uwsgi-{}'.format(UWSGI_VERSION),
-            'python2.7 uwsgiconfig.py --build',
+            '../../bin/python2.7 uwsgiconfig.py --build',
             'mv uwsgi ../../bin',
             'cd ..',
             
@@ -178,7 +178,8 @@ class NginxUwsgiPython27Installer (CustomAppOnPortInstaller):
         )
         
         # run install steps
-        self.api.system('bash -ec "{}"'.format('; '.join(install_steps).replace('"', r'\"')))
+        commands = 'bash -ec "{}"'.format('; '.join(install_steps).replace('"', r'\"'))
+        self.api.system(commands)
         
         # install nginx.conf and uwsgi.ini
         nginx_conf = (NGINX_CONF

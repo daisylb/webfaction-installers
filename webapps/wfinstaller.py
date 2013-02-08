@@ -31,6 +31,7 @@ class ApiPassthrough (object):
 
 class WebfactionInstaller (object):
 	app_id = None
+	debug = False
 	
 	def run(self, *args):
 		"""Initiate the installation process.
@@ -104,16 +105,17 @@ class WebfactionInstaller (object):
 			print_exception(exc_info[0], exc_info[1], exc_info[2], file=f)
 		
 		# Try to delete the app if possible
-		if self.args.action == "create":
+		if not self.debug:
+			if self.args.action == "create":
+				try:
+					self._pre_delete()
+					self.delete()
+				except:
+					pass
 			try:
-				self._pre_delete()
-				self.delete()
+				self._perform_actual_deletion()
 			except:
 				pass
-		try:
-			self._perform_actual_deletion()
-		except:
-			pass
 		
 		# exit with an error
 		exit(1)
