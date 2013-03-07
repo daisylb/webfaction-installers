@@ -114,12 +114,12 @@ RELOAD_APP = """
 #!/bin/bash
 set -e
 if test -f DIR/app/requirements.txt; then
-    DIR/bin/pip -U -r DIR/app/requirements.txt
+    DIR/bin/pip install -U -r DIR/app/requirements.txt
 fi
 if test -f DIR/app/update.sh; then
-    (cd DIR/app && bash update.sh)
+    (source DIR/bin/activate.sh && cd DIR/app && bash update.sh)
 fi
-supervisorctl restart app_APPNAME:*
+supervisorctl restart app-APPNAME:*
 """
 
 SAMPLE_APP = """
