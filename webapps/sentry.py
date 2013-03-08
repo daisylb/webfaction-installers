@@ -4,22 +4,16 @@
 """
 Sets up a Sentry installation.
 
-After installing, you may wish to edit sentry.conf.py to change the URL prefix and gunicorn worker count.
-
-You will also want to create a superuser by running this command: `bin/sentry --config=sentry.conf.py createsuperuser`, then `bin/sentry --config=sentry.conf.py repair --owner=<username>`.
+After installing, will need to edit the created sentry.conf.py and follow the instructions there.
 
 Things that don't work: languages other than English, running Sentry on a subdirectory
 
 Requires: supervisord, pip
 """
+from wfinstaller import CustomAppOnPortInstaller
 
-import xmlrpclib
-import sys
 import string 
 import random
-
-_old_stderr = sys.stderr
-sys.stderr = sys.stdout
 
 SENTRY_CONF = """
 import os.path
@@ -32,12 +26,16 @@ import os.path
 # By default it will try to guess it, but it will almost certainly guess wrong due to WF's reverse proxy.
 # It should NOT have a trailing slash.
 
-# SENTRY_URL_PREFIX = 'http://{app_name}.{username}.webfactional.com'
+# SENTRY_URL_PREFIX = 'http://{self.args.app_name}.{self.args.username}.webfactional.com'
 
 # The installer creates a Sentry mailbox (named the same as the app) for you.
 # You will need to attatch that mailbox to an email address, and then change the following line appropriately.
 
-SERVER_EMAIL = '{app_name}@{username}.webfactional.com'
+SERVER_EMAIL = '{self.args.app_name}@{self.args.username}.webfactional.com'
+
+# Once you're done, run these commands:
+# {sentry_bin} --config=sentry.conf.py upgrade
+# supervisorctl start app-{self.args.app_name}
 
 #######
 # End #
@@ -63,13 +61,13 @@ SENTRY_KEY = '{secret}'
 SENTRY_PUBLIC = False
 
 SENTRY_WEB_HOST = '0.0.0.0'
-SENTRY_WEB_PORT = {port}
+SENTRY_WEB_PORT = {self.port}
 SENTRY_WEB_OPTIONS = {{
 	'workers': 2,  # the number of gunicorn workers
 }}
 
 EMAIL_HOST = 'smtp.webfaction.com'
-EMAIL_HOST_USER = '{app_name}'
+EMAIL_HOST_USER = '{db_name}'
 EMAIL_HOST_PASSWORD = '{mail_pass}'
 DEFAULT_FROM_EMAIL = SERVER_EMAIL
 
@@ -84,7 +82,7 @@ USE_L10N = False
 """
 
 SUPERVISOR_CONF = """
-[program:app-{app_name}]
+[program:app-{self.args.app_name}]
 directory={app_dir}
 command={sentry_bin} --config=sentry.conf.py start http
 autostart=true
@@ -95,78 +93,67 @@ redirect_stderr=true
 def generate_password(len):
 	return ''.join(random.choice(string.ascii_letters + string.digits) for x in xrange(len))
 
-def create(account, app_name, autostart, extra_info, password, server, session_id, username):
-	app_dir = "/home/{}/webapps/{}".format(username, app_name)
-	sentry_bin = app_dir + "/bin/sentry"
-	pip_bin = "/home/{}/bin/pip-2.7".format(username)
+class SentryInstaller (CustomAppOnPortInstaller):
+	def create(self):
+		app_dir = "/home/{}/webapps/{}".format(self.args.username, self.args.app_name)
+		sentry_bin = app_dir + "/bin/sentry"
+		pip_bin = "/home/{}/bin/pip-2.7".format(self.args.username)
+		
+		# install sentry
+		self.api.system('{pip_bin} install -U --install-option="--install-scripts={app_dir}/bin" --install-option="--install-lib={app_dir}/lib/python2.7" sentry'.format(**locals()))
 	
-	# create base app
-	app = server.create_app(session_id, app_name, 'custom_app_with_port', False, '')
-	port = app['port']
+		# create database
+		db_name = "{}_{}".format(self.args.username, self.args.app_name)
+		db_pass = generate_password(30)
+		self.api.create_db(db_name, 'postgresql', db_pass)
+		
+		# create mailbox
+		mail_pass = generate_password(30)
+		self.api.create_mailbox(db_name, True, True)
+		self.api.change_mailbox_password(db_name, mail_pass)
+		
+		# generate a secret
+		secret = generate_password(56)
+		
+		# write config
+		self.api.write_file('sentry.conf.py', SENTRY_CONF.format(**locals()), 'w')
+		self.api.write_file('supervisord.conf', SUPERVISOR_CONF.format(**locals()), 'w')
+		self.api.system('ln -s {}/supervisord.conf $HOME/supervisor/app_{}.conf'.format(app_dir, self.args.app_name))
 	
-	# install sentry
-	server.system(session_id, '{pip_bin} install -U --install-option="--install-scripts={app_dir}/bin" --install-option="--install-lib={app_dir}/lib/python2.7" sentry'.format(**locals()))
+		
+		# build db
+		# sometimes this causes a RuntimeWarning that may or may not be fatal
+		#try:
+		#	self.api.system('{} --config=sentry.conf.py upgrade --noinput'.format(sentry_bin))
+		#except xmlrpclib.Fault as f:
+		#	self.api.write_file('install_error.log', 'Code {}\n{}'.format(f.faultCode, f.faultString))
+		
+		# start server
+		self.api.system('$HOME/bin/supervisorctl update')
 
-	# create database
-	db_name = "{}_{}".format(username, app_name)
-	db_pass = generate_password(30)
-	server.create_db(session_id, db_name, 'postgresql', db_pass)
-	
-	# create mailbox
-	mail_pass = generate_password(30)
-	server.create_mailbox(session_id, app_name, True, True)
-	server.change_mailbox_password(session_id, app_name, mail_pass)
-	
-	# generate a secret
-	secret = generate_password(56)
-	
-	# write config
-	server.write_file(session_id, 'sentry.conf.py', SENTRY_CONF.format(**locals()), 'w')
-	server.write_file(session_id, 'supervisord.conf', SUPERVISOR_CONF.format(**locals()), 'w')
-	server.system(session_id, 'ln -s {}/supervisord.conf $HOME/supervisor/app_{}.conf'.format(app_dir, app_name))
-
-	
-	# build db
-	# sometimes this causes a RuntimeWarning that may or may not be fatal
-	try:
-		server.system(session_id, '{} --config=sentry.conf.py upgrade --noinput'.format(sentry_bin))
-	except xmlrpclib.Fault as f:
-		server.write_file(session_id, 'install_error.log', 'Code {}\n{}'.format(f.faultCode, f.faultString))
-	
-	# start server
-	server.system(session_id, '$HOME/bin/supervisorctl update')
-
-	print app['id']
-
-def delete(account, app_name, autostart, extra_info, password, server, session_id, username):
-	# Delete application and database.
-	try:
-		server.system(session_id, 'unlink $HOME/supervisor/app_{}.conf'.format(app_name))
-		server.system(session_id, '$HOME/bin/supervisorctl update')
-	except:
-		pass
-
-	server.delete_app(session_id, app_name)
-
-	try:
-		server.delete_db(session_id, '%s_%s' % (username, app_name), 'postgresql')
-	except:
-		pass
-
-if __name__ == '__main__':
-	try:
-		action, username, password, machine, app_name, autostart, extra_info = sys.argv[1:]
-		server = xmlrpclib.ServerProxy('https://api.webfaction.com/')
-		session_id, account = server.login(username, password, machine)
-		func = locals()[action]
-		func(account, app_name, autostart, extra_info, password, server, session_id, username)
-	except Exception as e:
-		# try to delete the app
+	def delete(self):
+		# Delete the supervisor config file.
 		try:
-			delete(account, app_name, autostart, extra_info, password, server, session_id, username)
+			self.api.system('unlink $HOME/supervisor/app_{}.conf'.format(app_name))
+			self.api.system('$HOME/bin/supervisorctl update')
 		except:
 			pass
-		# print the exception
-		from traceback import print_exc
-		print_exc(sys.stdout)
+			
+		db_name = '{}_{}'.format(self.args.username, self.args.app_name)
+		
+		try:
+			self.api.delete_db(db_name, 'postgresql')
+			self.api.delete_db_user(db_name, 'postgresql')
+		except:
+			pass
+		
+		try:
+			self.api.delete_mailbox(db_name)
+		except:
+			pass
+
+if __name__ == '__main__':
+	if __name__ == '__main__':
+		import sys
+		SentryInstaller().run(*sys.argv[1:])
 # -----END WEBFACTION INSTALL SCRIPT-----
