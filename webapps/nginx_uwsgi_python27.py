@@ -117,7 +117,7 @@ if test -f DIR/app/requirements.txt; then
     DIR/bin/pip install -U -r DIR/app/requirements.txt
 fi
 if test -f DIR/app/update.sh; then
-    (source DIR/bin/activate.sh && cd DIR/app && bash update.sh)
+    (source DIR/bin/activate && cd DIR/app && bash update.sh)
 fi
 supervisorctl restart app-APPNAME:*
 """
