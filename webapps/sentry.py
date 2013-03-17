@@ -4,7 +4,7 @@
 """
 Sets up a Sentry installation.
 
-After installing, will need to edit the created sentry.conf.py and follow the instructions there.
+After installing, run the script 
 
 Things that don't work: languages other than English, running Sentry on a subdirectory
 
@@ -26,12 +26,12 @@ import os.path
 # By default it will try to guess it, but it will almost certainly guess wrong due to WF's reverse proxy.
 # It should NOT have a trailing slash.
 
-# SENTRY_URL_PREFIX = 'http://{self.args.app_name}.{self.args.username}.webfactional.com'
+# SENTRY_URL_PREFIX = '__URL__'
 
 # The installer creates a Sentry mailbox (named the same as the app) for you.
 # You will need to attatch that mailbox to an email address, and then change the following line appropriately.
 
-SERVER_EMAIL = '{self.args.app_name}@{self.args.username}.webfactional.com'
+SERVER_EMAIL = '__EMAIL__'
 
 # Once you're done, run these commands:
 # {sentry_bin} --config=sentry.conf.py upgrade
@@ -81,6 +81,31 @@ USE_I18N = False
 USE_L10N = False
 """
 
+POST_INSTALL_SCRIPT = """#!/bin/bash
+set -e
+echo "The installer script has created a mailbox for Sentry, but hasn't connected it to an email address."
+echo "Go to the WebFaction control panel, and create an email address connected to the {db_name} mailbox. Then enter that email address below."
+read EMAIL
+echo "Next, connect the {self.args.app_name} application to a website, and enter its URL below."
+echo "Include the 'http://' or 'https://' at the beginning. DO NOT include a slash at the end."
+echo "Example: https://sentry.example.com"
+read URL
+
+echo "Writing Sentry config..."
+sed -e "s|__URL__|${{URL}}|g" -e "s|__EMAIL__|${{EMAIL}}|g" <sentry.conf.py.tpl >sentry.conf.py
+rm sentry.conf.py.tpl
+
+echo "Syncing database..."
+{sentry_bin} --config=sentry.conf.py upgrade
+
+echo "Installing Supervisor config..."
+ln -s {app_dir}/supervisord.conf $HOME/supervisor/app_{self.args.app_name}.conf
+$HOME/bin/supervisorctl update
+$HOME/bin/supervisorctl status app-{self.args.app_name}
+
+echo "Check everything works properly, then remove this script."
+"""
+
 SUPERVISOR_CONF = """
 [program:app-{self.args.app_name}]
 directory={app_dir}
@@ -116,9 +141,10 @@ class SentryInstaller (CustomAppOnPortInstaller):
 		secret = generate_password(56)
 		
 		# write config
-		self.api.write_file('sentry.conf.py', SENTRY_CONF.format(**locals()), 'w')
+		self.api.write_file('sentry.conf.py.tpl', SENTRY_CONF.format(**locals()), 'w')
 		self.api.write_file('supervisord.conf', SUPERVISOR_CONF.format(**locals()), 'w')
-		self.api.system('ln -s {}/supervisord.conf $HOME/supervisor/app_{}.conf'.format(app_dir, self.args.app_name))
+		self.api.write_file('post_install.sh', POST_INSTALL_SCRIPT.format(**locals()), 'w')
+		self.api.system('chmod +x post_install.sh')
 	
 		
 		# build db
@@ -129,7 +155,7 @@ class SentryInstaller (CustomAppOnPortInstaller):
 		#	self.api.write_file('install_error.log', 'Code {}\n{}'.format(f.faultCode, f.faultString))
 		
 		# start server
-		self.api.system('$HOME/bin/supervisorctl update')
+		#self.api.system('$HOME/bin/supervisorctl update')
 
 	def delete(self):
 		# Delete the supervisor config file.
